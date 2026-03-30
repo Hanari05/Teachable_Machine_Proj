@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Teachable Machine</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: #f7f8fa;
+      color: #1a1a2e;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      background: #ffffff;
+      border-radius: 20px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.07);
+      padding: 2rem;
+      width: 100%;
+      max-width: 400px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #1a1a2e;
+      letter-spacing: -0.01em;
+    }
+
+    .header p {
+      font-size: 0.78rem;
+      color: #9ca3af;
+      margin-top: 0.25rem;
+      font-weight: 300;
+    }
+
+    /* Webcam */
+    #webcam-container {
+      width: 280px;
+      height: 280px;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #f0f1f3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    #webcam-container canvas {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover;
+      display: block;
+    }
+
+    .placeholder-text {
+      font-size: 0.8rem;
+      color: #c0c4cc;
+      font-weight: 400;
+    }
+
+    /* Top prediction badge */
+    #top-badge {
+      display: none;
+      background: #f0f7ff;
+      border: 1px solid #d1e6ff;
+      color: #2563eb;
+      font-size: 0.82rem;
+      font-weight: 600;
+      padding: 0.4rem 1rem;
+      border-radius: 99px;
+      letter-spacing: 0.01em;
+    }
+
+    /* Labels */
+    #label-container {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+    }
+
+    .label-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+
+    .label-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+    }
+
+    .label-name { color: #374151; font-weight: 500; }
+    .label-pct  { color: #9ca3af; font-weight: 400; }
+
+    .bar-track {
+      height: 6px;
+      background: #f0f1f3;
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 99px;
+      background: #d1d5db;
+      transition: width 0.15s ease-out, background 0.15s;
+      width: 0%;
+    }
+
+    .label-row.top .label-name { color: #2563eb; }
+    .label-row.top .label-pct  { color: #2563eb; }
+    .label-row.top .bar-fill   { background: #2563eb; }
+
+    /* Button */
+    #start-btn {
+      width: 100%;
+      padding: 0.75rem;
+      background: #1a1a2e;
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-family: inherit;
+      font-size: 0.88rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      letter-spacing: 0.01em;
+    }
+
+    #start-btn:hover  { background: #2d2d4e; }
+    #start-btn:active { transform: scale(0.98); }
+    #start-btn:disabled { background: #e5e7eb; color: #9ca3af; cursor: not-allowed; }
+
+    /* Footer */
+    footer {
+      margin-top: 1.5rem;
+      font-size: 0.7rem;
+      color: #d1d5db;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="header">
+      <h1>Image Classifier</h1>
+      <p>Teachable Machine · 6 classes · MobileNetV2</p>
+    </div>
+
+    <div id="webcam-container">
+      <span class="placeholder-text" id="placeholder">Press Start</span>
+    </div>
+
+    <div id="top-badge"></div>
+
+    <div id="label-container"></div>
+
+    <button id="start-btn" onclick="init()">Start Webcam</button>
+  </div>
+
+  <footer>Powered by TensorFlow.js &amp; Teachable Machine</footer>
+
+  <script>
+    const URL = "https://teachablemachine.withgoogle.com/models/LZJBeNpTz/";
+    let model, webcam, maxPredictions;
+
+    async function init() {
+      const btn = document.getElementById('start-btn');
+      btn.disabled = true;
+      btn.textContent = 'Loading…';
+
+      model = await tmImage.load(URL + "model.json", URL + "metadata.json");
+      maxPredictions = model.getTotalClasses();
+
+      webcam = new tmImage.Webcam(280, 280, true);
+      await webcam.setup();
+      await webcam.play();
+
+      document.getElementById('placeholder').style.display = 'none';
+      document.getElementById('webcam-container').appendChild(webcam.canvas);
+      document.getElementById('top-badge').style.display = 'block';
+
+      // Build label rows
+      const lc = document.getElementById('label-container');
+      lc.innerHTML = '';
+      for (let i = 0; i < maxPredictions; i++) {
+        lc.innerHTML += `
+          <div class="label-row" id="row-${i}">
+            <div class="label-header">
+              <span class="label-name" id="lname-${i}"></span>
+              <span class="label-pct"  id="lpct-${i}">0%</span>
+            </div>
+            <div class="bar-track">
+              <div class="bar-fill" id="bar-${i}"></div>
+            </div>
+          </div>`;
+      }
+
+      btn.textContent = 'Running…';
+      window.requestAnimationFrame(loop);
+    }
+
+    async function loop() {
+      webcam.update();
+      await predict();
+      window.requestAnimationFrame(loop);
+    }
+
+    async function predict() {
+      const preds = await model.predict(webcam.canvas);
+      let topIdx = 0;
+      preds.forEach((p, i) => {
+        if (p.probability > preds[topIdx].probability) topIdx = i;
+      });
+
+      document.getElementById('top-badge').textContent =
+        `✦ ${preds[topIdx].className}`;
+
+      preds.forEach((p, i) => {
+        const pct = Math.round(p.probability * 100);
+        document.getElementById(`lname-${i}`).textContent = p.className;
+        document.getElementById(`lpct-${i}`).textContent  = pct + '%';
+        document.getElementById(`bar-${i}`).style.width   = pct + '%';
+        document.getElementById(`row-${i}`).className =
+          'label-row' + (i === topIdx ? ' top' : '');
+      });
+    }
+  </script>
+
+</body>
+</html>

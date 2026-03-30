@@ -1,3 +1,4 @@
-keras_model.h5/
-weights.bin/
-venv/
+Python/keras_model.h5/
+Web/weights.bin/
+Python/venv/
+
